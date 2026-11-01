@@ -1,5 +1,5 @@
 // Hunt Plan: main UI. Map + per-property sections + marks editing + onX import.
-import { BASE_LAYERS, OVERLAYS, DEFAULT_BASE, TYPES, FIELD_DEFS, WINDS, REPO } from './config.js';
+import { COUNTY_VIEWERS, BASE_LAYERS, OVERLAYS, DEFAULT_BASE, TYPES, FIELD_DEFS, WINDS, REPO } from './config.js';
 import { makeLayer, parcelsLayer, parcelAt } from './layers.js';
 import { iconSvg } from './icons.js';
 import * as store from './store.js';
@@ -276,6 +276,8 @@ function showFeature(id) {
   }
   acts.append(h('button', { class: 'btn', onclick: () => copyText(`${ll[0].toFixed(6)}, ${ll[1].toFixed(6)}`) }, 'Copy GPS'));
   acts.append(h('a', { class: 'btn', style: 'text-align:center;text-decoration:none', href: `https://www.google.com/maps/dir/?api=1&destination=${ll[0]},${ll[1]}`, target: '_blank', rel: 'noopener' }, 'Directions'));
+  const cv = countyViewer(prop(f.propertyId)?.county);
+  if (cv) acts.append(h('a', { class: 'btn', style: 'grid-column:1/-1', href: cv.url, target: '_blank', rel: 'noopener', onclick: () => copyText(`${ll[0].toFixed(6)}, ${ll[1].toFixed(6)}`) }, cv.label));
   if (store.canEdit()) acts.append(h('button', { class: 'btn danger', onclick: () => confirmDelete(f) }, 'Delete'));
   body.append(acts);
   openSheet(f.name, body, () => { ui.selected = null; render(); });
@@ -440,7 +442,9 @@ function onParcelTap(f, latlng) {
   fact('Owner', [p.OWNERNME1, p.OWNERNME2].filter(Boolean).join(' & '));
   fact('Acres', ac ? Number(ac).toFixed(2) : '');
   fact('Parcel', p.PARCELID); fact('County', p.CONAME); fact('Class', p.PROPCLASS); fact('Address', p.SITEADRESS);
+  const cvp = countyViewer(p.CONAME);
   const body = h('div', {}, facts, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'From the Wisconsin statewide parcel map. Always confirm boundaries and permission on the ground.'));
+  if (cvp) body.append(h('a', { class: 'btn', style: 'display:block;margin-bottom:14px', href: cvp.url, target: '_blank', rel: 'noopener', onclick: () => p.PARCELID && copyText(p.PARCELID) }, cvp.label + (p.PARCELID ? ' (copies parcel #)' : '')));
   if (store.canEdit() && data().properties.length) {
     const sel = h('select', {}, props().map((x) => h('option', { value: x.id, selected: x.id === (ui.propId || propertyFor(data().properties, f.geometry)) }, x.name)));
     body.append(h('div', { class: 'card' }, h('h3', {}, 'Use as a property boundary'), h('p', {}, 'Adds this parcel to the boundary line of one of your properties. Do it once for each parcel the property covers.'), sel,
@@ -450,6 +454,7 @@ function onParcelTap(f, latlng) {
   }
   openSheet(p.OWNERNME1 || 'Parcel', body);
 }
+function countyViewer(county) { return county ? COUNTY_VIEWERS.find((v) => v.match.test(county)) : null; }
 function polysOf(g) { return !g ? [] : g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []; }
 async function addParcelToBoundary(pid, geometry, replace) {
   const p = prop(pid); if (!p) return;

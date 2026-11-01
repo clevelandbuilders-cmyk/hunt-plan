@@ -80,3 +80,8 @@ export const FIELD_DEFS = {
   seen:      { label: 'Date seen', kind: 'date' },
   food:      { label: 'Food type', kind: 'select', options: ['', 'Acorns (white oak)', 'Acorns (red oak)', 'Standing corn', 'Picked corn', 'Soybeans', 'Alfalfa / clover', 'Brassicas / turnips', 'Winter wheat / rye', 'Browse / clearcut', 'Apples', 'Other'] },
 };
+
+// County map sites with EagleView photos, opened in a new tab (their imagery can't be shown inside this site).
+export const COUNTY_VIEWERS = [
+  { match: /washburn/i, label: 'Open in Beacon (EagleView)', url: 'https://beacon.schneidercorp.com/Application.aspx?AppID=1211&LayerID=36507&PageTypeID=1&PageID=13939' },
+];
