@@ -48,7 +48,7 @@ export const WINDS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 // "grade" is used by the scouting step to rank funnels, stands and crossings.
 export const TYPES = {
   stand:     { label: 'Tree stand',   geom: 'point', glyph: 'TS', color: '#e8590c', fields: ['bestWinds', 'timeOfDay', 'height', 'grade', 'access'] },
-  blind:     { label: 'Ground blind', geom: 'point', glyph: 'GB', color: '#d9480f', fields: ['bestWinds', 'timeOfDay', 'grade', 'access'] },
+  blind:     { label: 'Ground blind', geom: 'point', glyph: 'GB', color: '#7f5539', fields: ['bestWinds', 'timeOfDay', 'grade', 'access'] },
   camera:    { label: 'Trail camera', geom: 'point', glyph: '📷', color: '#1971c2', fields: ['brand', 'camName', 'facing'] },
   scrape:    { label: 'Scrape',       geom: 'point', glyph: 'S',  color: '#862e9c', fields: ['seen'] },
   rub:       { label: 'Rub',          geom: 'point', glyph: 'R',  color: '#9c36b5', fields: ['seen'] },

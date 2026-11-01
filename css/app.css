@@ -95,7 +95,9 @@ code.box { display: block; word-break: break-all; background: #0f130c; padding: 
 #toast { position: absolute; z-index: 3000; left: 50%; top: calc(70px + var(--safe-top)); transform: translateX(-50%); background: #000d; border: 1px solid var(--line); padding: 10px 16px; border-radius: 999px; max-width: 90vw; text-align: center; transition: opacity .3s; }
 
 /* map marks */
-.mk { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 11px; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.6); }
+.mk { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.7); }
+.mk svg, .glyph svg { display: block; }
+.mk.sel { transform: scale(1.25); }
 .mk.sel { outline: 3px solid var(--accent2); outline-offset: 2px; }
 .leaflet-tooltip.lbl { background: rgba(0,0,0,.65); color: #fff; border: 0; box-shadow: none; font-weight: 600; padding: 2px 6px; }
 .leaflet-tooltip.lbl::before { display: none; }

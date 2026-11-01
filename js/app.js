@@ -1,6 +1,7 @@
 // Hunt Plan: main UI. Map + per-property sections + marks editing + onX import.
 import { BASE_LAYERS, OVERLAYS, DEFAULT_BASE, TYPES, FIELD_DEFS, WINDS, REPO } from './config.js';
 import { makeLayer, parcelsLayer, parcelAt } from './layers.js';
+import { iconSvg } from './icons.js';
 import * as store from './store.js';
 import { uid } from './model.js';
 import { parseFile, fingerprint, toKml } from './importer.js';
@@ -48,7 +49,7 @@ function download(name, text, type = 'application/octet-stream') {
   const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
   document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
-const glyph = (type, size) => { const t = TYPES[type] || TYPES.waypoint; const g = h('span', { class: 'glyph' }, t.glyph || (t.geom === 'line' ? '〰' : '▢')); g.style.background = t.color; if (size) { g.style.width = g.style.height = size + 'px'; } return g; };
+const glyph = (type, size) => { const t = TYPES[type] || TYPES.waypoint; const g = h('span', { class: 'glyph', html: iconSvg(type, 20, t.geom) }); g.style.background = t.color; if (size) { g.style.width = g.style.height = size + 'px'; } return g; };
 const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
 // ---------- lock screen ----------
@@ -93,7 +94,7 @@ function initMap() {
   L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(ui.map);
   setBase(view.baseV2 || DEFAULT_BASE);
   for (const id of view.overlaysV2 || OVERLAYS.filter((o) => o.default).map((o) => o.id)) toggleOverlay(id, true);
-  ui.labels = view.labels !== false;
+  ui.labels = view.labelsV2 === true; // names on the map are off unless turned on in Map layers
   ui.layer = L.layerGroup().addTo(ui.map);
   ui.propLayer = L.layerGroup().addTo(ui.map);
   ui.drawLayer = L.layerGroup().addTo(ui.map);
@@ -103,7 +104,7 @@ function initMap() {
   if (pid && prop(pid)) selectProperty(pid, false); else { render(); openPropertyPicker(); fitAll(); }
   handleEditorLink();
 }
-function saveView() { store.prefs.view = { baseV2: ui.baseId, overlaysV2: Object.keys(ui.overlays), labels: ui.labels, prop: ui.propId }; }
+function saveView() { store.prefs.view = { baseV2: ui.baseId, overlaysV2: Object.keys(ui.overlays), labelsV2: ui.labels, prop: ui.propId }; }
 function setBase(id) { if (ui.base) ui.map.removeLayer(ui.base); const l = BASE_LAYERS.find((x) => x.id === id) || BASE_LAYERS[0]; ui.base = zset(makeLayer(l), 1).addTo(ui.map); ui.baseId = l.id; saveView(); }
 function toggleOverlay(id, on) {
   if (ui.overlays[id]) { ui.map.removeLayer(ui.overlays[id]); delete ui.overlays[id]; }
@@ -137,7 +138,7 @@ function selectProperty(id, move = true) {
 
 function markerIcon(f) {
   const t = TYPES[f.type] || TYPES.waypoint;
-  return L.divIcon({ className: '', html: `<div class="mk${ui.selected === f.id ? ' sel' : ''}" style="background:${t.color}">${t.glyph}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+  return L.divIcon({ className: '', html: `<div class="mk${ui.selected === f.id ? ' sel' : ''}" style="background:${t.color}">${iconSvg(f.type, 17)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
 }
 function render() {
   if (!ui.map) return;
@@ -213,7 +214,7 @@ $('#layersBtn').onclick = () => {
   body.append(list, h('div', { class: 'group' }, 'Overlays'));
   const ol = h('div', { class: 'list' });
   for (const l of OVERLAYS) ol.append(h('button', { class: 'item' + (ui.overlays[l.id] ? ' sel' : ''), onclick: () => { toggleOverlay(l.id, !ui.overlays[l.id]); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.overlays[l.id] ? '✓ ' : '') + l.label))));
-  ol.append(h('button', { class: 'item' + (ui.labels ? ' sel' : ''), onclick: () => { ui.labels = !ui.labels; saveView(); render(); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.labels ? '✓ ' : '') + 'Mark names (zoomed in)'))));
+  ol.append(h('button', { class: 'item' + (ui.labels ? ' sel' : ''), onclick: () => { ui.labels = !ui.labels; saveView(); render(); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.labels ? '✓ ' : '') + 'Show mark names on the map'))));
   body.append(ol, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Tip: WI leaf-off shows the woods with no leaves, so trails, benches and thick cover stand out. Add Contour lines or Hillshade to read saddles, ridges and draws. Property lines show once you zoom in close; tap inside one for the owner.'));
   openSheet('Map layers', body);
 };
