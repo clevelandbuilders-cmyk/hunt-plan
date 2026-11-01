@@ -45,3 +45,7 @@ export function acres(g) { // spherical polygon area
   return m2 / 4046.8564;
 }
 export function fmtDist(m) { const yd = m * 1.09361; return yd < 1760 ? Math.round(yd) + ' yd' : (m / 1609.34).toFixed(2) + ' mi'; }
+export function nearestPropertyDist(properties, g) {
+  const c = centroid(g);
+  return Math.min(Infinity, ...properties.map((p) => (p.boundary && pointInGeom(c, p.boundary) ? 0 : distM([c[1], c[0]], p.center))));
+}

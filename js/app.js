@@ -3,7 +3,7 @@ import { BASE_LAYERS, OVERLAYS, TYPES, FIELD_DEFS, WINDS, REPO } from './config.
 import * as store from './store.js';
 import { uid } from './model.js';
 import { parseFile, fingerprint, toKml } from './importer.js';
-import { propertyFor, acres, distM, centroid, fmtDist } from './geo.js';
+import { propertyFor, acres, distM, centroid, fmtDist, nearestPropertyDist } from './geo.js';
 import { checkToken } from './github.js';
 
 const $ = (s) => document.querySelector(s);
@@ -466,7 +466,8 @@ function importPreview(fileName, cands) {
   if (!cands.length) return toast('No waypoints, lines or areas found in that file.');
   const have = new Set(data().features.map((f) => f.fingerprint).filter(Boolean));
   let assign = 'auto';
-  const rows = cands.map((c) => ({ c, on: !have.has(fingerprint(c)), type: c.type, dup: have.has(fingerprint(c)) }));
+  // Markers more than ~5 miles from every property are left unchecked (other spots in the same onX account).
+  const rows = cands.map((c) => { const dup = have.has(fingerprint(c)); const far = nearestPropertyDist(data().properties, c.geometry) > 8000; return { c, on: !dup && !far, type: c.type, dup, far }; }).sort((a, b) => a.far - b.far);
   const body = h('div');
   const assignSel = h('select', {}, h('option', { value: 'auto' }, 'Automatic (by location)'), props().map((p) => h('option', { value: p.id, selected: p.id === ui.propId }, p.name)));
   if (ui.propId) assign = ui.propId;
@@ -480,11 +481,12 @@ function importPreview(fileName, cands) {
       sel.onchange = () => (r.type = sel.value);
       const cb = h('input', { type: 'checkbox', checked: r.on, style: 'width:22px;height:22px' }); cb.onchange = () => (r.on = cb.checked);
       const pid = assign === 'auto' ? propertyFor(data().properties, r.c.geometry) : assign;
-      list.append(h('div', { class: 'item' }, cb, h('span', { class: 't' }, h('b', {}, r.c.name), h('small', {}, [prop(pid)?.name, r.dup ? 'already imported' : ''].filter(Boolean).join(' · '))), sel));
+      list.append(h('div', { class: 'item' }, cb, h('span', { class: 't' }, h('b', {}, r.c.name), h('small', {}, [r.far && assign === 'auto' ? 'far from your properties' : prop(pid)?.name, r.dup ? 'already imported' : ''].filter(Boolean).join(' · '))), sel));
     }
   };
   draw();
-  body.append(h('p', { class: 'muted' }, `${cands.length} items in ${fileName}. Check the type for each; names like "stand", "cam" or "scrape" are guessed for you.`),
+  const nFar = rows.filter((r) => r.far).length;
+  body.append(h('p', { class: 'muted' }, `${cands.length} items in ${fileName}. Types come from the onX icon or the name; change any that are wrong.${nFar ? ` ${nFar} are far from every property and are unchecked.` : ''}`),
     h('label', { class: 'field' }, h('span', {}, 'Put them on'), assignSel), list,
     h('div', { class: 'actions', style: 'margin-top:14px' }, h('button', { class: 'btn', onclick: closeSheet }, 'Cancel'), h('button', { class: 'btn primary', onclick: async () => {
       const chosen = rows.filter((r) => r.on); if (!chosen.length) return toast('Nothing selected');
@@ -498,7 +500,7 @@ function importPreview(fileName, cands) {
             if (p) { const c = centroid(r.c.geometry); Object.assign(p, { boundary: r.c.geometry, center: [round7(c[1]), round7(c[0])], updated: now }); nb++; }
             continue;
           }
-          d.features.push({ id: uid(), type: r.type, name: r.c.name, notes: r.c.notes, geometry: r.c.geometry, propertyId: pid, props: r.c.time ? { seen: String(r.c.time).slice(0, 10) } : {}, source: 'import:' + fileName, fingerprint: fingerprint(r.c), by: store.prefs.name || '', created: now, updated: now });
+          d.features.push({ id: uid(), type: r.type, name: r.c.name, notes: r.c.notes, geometry: r.c.geometry, propertyId: pid, props: r.c.time ? { seen: String(r.c.time).slice(0, 10) } : {}, source: 'import:' + fileName, fingerprint: fingerprint(r.c), onxIcon: r.c.icon || undefined, by: store.prefs.name || '', created: now, updated: now });
         }
       }, `Import ${chosen.length} from ${fileName}`);
       closeSheet(); toast(`Imported ${chosen.length - nb} marks${nb ? ` and ${nb} boundary` : ''}`); fitAll();

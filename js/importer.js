@@ -22,10 +22,20 @@ const AREA_RULES = [
   [/sanctuary|no.?go|stay out/i, 'sanctuary'],
 ];
 
-function guessType(name, geom) {
+// onX exports carry the icon picked in the app; trust it before guessing from the name.
+const ONX_ICONS = {
+  'tree stand': 'stand', 'ladder stand': 'stand', 'climber': 'stand', 'hang on': 'stand', 'blind': 'blind', 'ground blind': 'blind',
+  'trail cam': 'camera', 'camera': 'camera', 'scrape': 'scrape', 'rub': 'rub', 'bedding area': 'bed', 'bed': 'bed',
+  'crossing': 'crossing', 'pinch point': 'crossing', 'funnel': 'crossing',
+  'buck whitetail': 'sighting', 'buck': 'sighting', 'doe': 'sighting', 'deer': 'sighting', 'tracks': 'sighting', 'scat': 'sighting', 'blood': 'sighting', 'shed': 'sighting',
+  'food source': 'food', 'food plot': 'food', 'water source': 'water', 'water': 'water',
+  'parking': 'access', 'truck': 'access', 'gate': 'access', '4x4': 'access', 'camp': 'access', 'cabin': 'access', 'atv': 'access',
+};
+function guessType(name, geom, icon) {
+  if (geom === 'point' && icon && ONX_ICONS[String(icon).toLowerCase()]) return ONX_ICONS[String(icon).toLowerCase()];
   const n = name || '';
   if (geom === 'point') { for (const [re, t] of RULES) if (re.test(n)) return t; return 'waypoint'; }
-  if (geom === 'line') return /route|path|walk|entry|exit|access|road/i.test(n) ? 'route' : 'trail';
+  if (geom === 'line') return /route|track|path|walk|entry|exit|access|road/i.test(n) ? 'route' : 'trail';
   for (const [re, t] of AREA_RULES) if (re.test(n)) return t;
   return 'areaother';
 }
@@ -77,13 +87,14 @@ export async function parseFile(file) {
     if (!kind) return null;
     const p = f.properties || {};
     const nm = (p.name || p.title || '').toString().trim();
-    const notes = [p.description, p.desc, p.cmt].filter((x) => x && typeof x === 'string').join('\n').replace(/<[^>]+>/g, ' ').trim();
-    const t = guessType(nm, kind);
-    return { name: nm || TYPES[t]?.label || 'Imported', notes, geometry: strip2d(f.geometry), kind, type: t, time: p.time || null };
+    const notes = [p.notes, p.description, p.desc, p.cmt].filter((x) => x && typeof x === 'string').join('\n').replace(/<[^>]+>/g, ' ').trim();
+    const t = guessType(nm, kind, p.icon);
+    return { name: nm || TYPES[t]?.label || 'Imported', notes, icon: p.icon || null, geometry: strip2d(f.geometry), kind, type: t, time: p.time || null, onxId: p.id || null };
   }).filter(Boolean);
 }
 
 export function fingerprint(c) {
+  if (c.onxId) return 'onx:' + c.onxId;
   return (c.name || '') + '|' + JSON.stringify(c.geometry.coordinates).slice(0, 80);
 }
 
