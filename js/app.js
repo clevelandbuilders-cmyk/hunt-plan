@@ -1,5 +1,6 @@
 // Hunt Plan: main UI. Map + per-property sections + marks editing + onX import.
-import { BASE_LAYERS, OVERLAYS, TYPES, FIELD_DEFS, WINDS, REPO } from './config.js';
+import { BASE_LAYERS, OVERLAYS, DEFAULT_BASE, TYPES, FIELD_DEFS, WINDS, REPO } from './config.js';
+import { makeLayer, parcelsLayer, parcelAt } from './layers.js';
 import * as store from './store.js';
 import { uid } from './model.js';
 import { parseFile, fingerprint, toKml } from './importer.js';
@@ -83,14 +84,15 @@ window.addEventListener('online', () => store.sync());
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && store.state.key) store.sync(); });
 
 // ---------- map ----------
-function tile(l) { return L.tileLayer(l.url, { maxNativeZoom: l.maxNative, maxZoom: 21, opacity: l.opacity ?? 1, attribution: l.attr, crossOrigin: false, detectRetina: false }); }
+// zIndex keeps the base map under overlays no matter which is switched on last.
+function zset(layer, z) { if (layer.setZIndex) layer.setZIndex(z); if (layer.eachLayer) { let i = 0; layer.eachLayer((l) => zset(l, z + i++)); } return layer; }
 
 function initMap() {
   const view = store.prefs.view;
   ui.map = L.map('map', { zoomControl: false, attributionControl: true, maxZoom: 21, tap: true }).setView([45.87, -91.66], 14);
   L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(ui.map);
-  setBase(view.base || 'imagery-topo');
-  for (const id of view.overlays || ['labels']) toggleOverlay(id, true);
+  setBase(view.baseV2 || DEFAULT_BASE);
+  for (const id of view.overlaysV2 || OVERLAYS.filter((o) => o.default).map((o) => o.id)) toggleOverlay(id, true);
   ui.labels = view.labels !== false;
   ui.layer = L.layerGroup().addTo(ui.map);
   ui.propLayer = L.layerGroup().addTo(ui.map);
@@ -101,11 +103,11 @@ function initMap() {
   if (pid && prop(pid)) selectProperty(pid, false); else { render(); openPropertyPicker(); fitAll(); }
   handleEditorLink();
 }
-function saveView() { store.prefs.view = { base: ui.baseId, overlays: Object.keys(ui.overlays), labels: ui.labels, prop: ui.propId }; }
-function setBase(id) { if (ui.base) ui.map.removeLayer(ui.base); const l = BASE_LAYERS.find((x) => x.id === id) || BASE_LAYERS[0]; ui.base = tile(l).addTo(ui.map); ui.base.bringToBack(); ui.baseId = l.id; saveView(); }
+function saveView() { store.prefs.view = { baseV2: ui.baseId, overlaysV2: Object.keys(ui.overlays), labels: ui.labels, prop: ui.propId }; }
+function setBase(id) { if (ui.base) ui.map.removeLayer(ui.base); const l = BASE_LAYERS.find((x) => x.id === id) || BASE_LAYERS[0]; ui.base = zset(makeLayer(l), 1).addTo(ui.map); ui.baseId = l.id; saveView(); }
 function toggleOverlay(id, on) {
   if (ui.overlays[id]) { ui.map.removeLayer(ui.overlays[id]); delete ui.overlays[id]; }
-  if (on) { const l = OVERLAYS.find((x) => x.id === id); if (l) ui.overlays[id] = tile(l).addTo(ui.map); }
+  if (on) { const l = OVERLAYS.find((x) => x.id === id); if (l) ui.overlays[id] = (l.kind === 'parcels' ? parcelsLayer(ui.map, onParcelTap) : zset(makeLayer(l), 50 + OVERLAYS.indexOf(l) * 5)).addTo(ui.map); }
   saveView();
 }
 function zoomFor(p) { const a = p.acres || 50; return a < 40 ? 17 : a < 150 ? 16 : a < 600 ? 15 : a < 3000 ? 14 : 13; }
@@ -207,12 +209,12 @@ $('#layersBtn').onclick = () => {
   const body = h('div');
   body.append(h('div', { class: 'group' }, 'Base map'));
   const list = h('div', { class: 'list' });
-  for (const l of BASE_LAYERS) list.append(h('button', { class: 'item' + (ui.baseId === l.id ? ' sel' : ''), onclick: () => { setBase(l.id); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, l.label), h('small', {}, l.attr))));
+  for (const l of BASE_LAYERS) list.append(h('button', { class: 'item' + (ui.baseId === l.id ? ' sel' : ''), onclick: () => { setBase(l.id); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, l.label), h('small', {}, l.note || l.attr || (l.layers || []).map((x) => x.attr).filter(Boolean).slice(-1)[0] || ''))));
   body.append(list, h('div', { class: 'group' }, 'Overlays'));
   const ol = h('div', { class: 'list' });
   for (const l of OVERLAYS) ol.append(h('button', { class: 'item' + (ui.overlays[l.id] ? ' sel' : ''), onclick: () => { toggleOverlay(l.id, !ui.overlays[l.id]); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.overlays[l.id] ? '✓ ' : '') + l.label))));
   ol.append(h('button', { class: 'item' + (ui.labels ? ' sel' : ''), onclick: () => { ui.labels = !ui.labels; saveView(); render(); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.labels ? '✓ ' : '') + 'Mark names (zoomed in)'))));
-  body.append(ol, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Tip: "Satellite + contours" shows elevation lines on the photo, which helps spot saddles, benches and draws. Turn on Hillshade with any map to see ridges.'));
+  body.append(ol, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Tip: WI leaf-off shows the woods with no leaves, so trails, benches and thick cover stand out. Add Contour lines or Hillshade to read saddles, ridges and draws. Property lines show once you zoom in close; tap inside one for the owner.'));
   openSheet('Map layers', body);
 };
 
@@ -425,6 +427,46 @@ function startMove(f) {
   renderSync();
 }
 
+
+// ---------- parcels (WI statewide property lines) ----------
+function onParcelTap(f, latlng) {
+  if (ui.mode) return onMapClick({ latlng });
+  if ($('#sheet').classList.contains('open') && window.innerWidth < 900) return closeSheet();
+  const p = f.properties || {};
+  const ac = p.GISACRES || p.DEEDACRES;
+  const facts = h('dl', { class: 'facts' });
+  const fact = (k, v) => { if (v) facts.append(h('dt', {}, k), h('dd', {}, String(v))); };
+  fact('Owner', [p.OWNERNME1, p.OWNERNME2].filter(Boolean).join(' & '));
+  fact('Acres', ac ? Number(ac).toFixed(2) : '');
+  fact('Parcel', p.PARCELID); fact('County', p.CONAME); fact('Class', p.PROPCLASS); fact('Address', p.SITEADRESS);
+  const body = h('div', {}, facts, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'From the Wisconsin statewide parcel map. Always confirm boundaries and permission on the ground.'));
+  if (store.canEdit() && data().properties.length) {
+    const sel = h('select', {}, props().map((x) => h('option', { value: x.id, selected: x.id === (ui.propId || propertyFor(data().properties, f.geometry)) }, x.name)));
+    body.append(h('div', { class: 'card' }, h('h3', {}, 'Use as a property boundary'), h('p', {}, 'Adds this parcel to the boundary line of one of your properties. Do it once for each parcel the property covers.'), sel,
+      h('div', { class: 'row', style: 'margin-top:8px' },
+        h('button', { class: 'btn small primary', onclick: () => addParcelToBoundary(sel.value, f.geometry, false) }, 'Add to boundary'),
+        h('button', { class: 'btn small', onclick: () => addParcelToBoundary(sel.value, f.geometry, true) }, 'Replace boundary'))));
+  }
+  openSheet(p.OWNERNME1 || 'Parcel', body);
+}
+function polysOf(g) { return !g ? [] : g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []; }
+async function addParcelToBoundary(pid, geometry, replace) {
+  const p = prop(pid); if (!p) return;
+  const parts = [...(replace ? [] : polysOf(p.boundary)), ...polysOf(geometry)];
+  const g = parts.length === 1 ? { type: 'Polygon', coordinates: parts[0] } : { type: 'MultiPolygon', coordinates: parts };
+  await saveBoundary(p, g);
+  closeSheet();
+}
+async function boundaryFromParcels(p) {
+  toast('Looking up parcel records…');
+  try {
+    const fs = await parcelAt(p.center[0], p.center[1]);
+    if (!fs.length) return toast('No parcel found at the property center. Zoom in and tap the parcel instead.', 5000);
+    await saveBoundary(p, fs[0].geometry);
+    toast(`Boundary set from parcel ${fs[0].properties.PARCELID || ''} (${fs[0].properties.OWNERNME1 || 'owner unknown'}). Add more parcels by tapping them.`, 6000);
+  } catch (e) { toast('Parcel lookup failed: ' + e.message, 5000); }
+}
+
 // ---------- properties ----------
 function editProperty(id) {
   const p = id ? JSON.parse(JSON.stringify(prop(id))) : { id: uid('p'), name: '', county: '', area: '', acres: null, ownership: 'private', center: ui.map.getCenter() && [round7(ui.map.getCenter().lat), round7(ui.map.getCenter().lng)], notes: '', boundary: null };
@@ -433,8 +475,9 @@ function editProperty(id) {
   const own = h('select', {}, h('option', { value: 'private', selected: p.ownership === 'private' }, 'Private (permission)'), h('option', { value: 'public', selected: p.ownership === 'public' }, 'Public land'));
   own.onchange = () => (p.ownership = own.value);
   const notes = h('textarea', { placeholder: 'Landowner contact, rules, parking, who hunts it…' }, p.notes || ''); notes.oninput = () => (p.notes = notes.value);
-  const bcard = h('div', { class: 'card' }, h('h3', {}, 'Boundary'), h('p', {}, p.boundary ? `Set (${acres(p.boundary).toFixed(1)} acres drawn).` : 'Not set. Import the boundary from onX (menu > Import) or draw it.'),
+  const bcard = h('div', { class: 'card' }, h('h3', {}, 'Boundary'), h('p', {}, p.boundary ? `Set (${acres(p.boundary).toFixed(1)} acres drawn).` : 'Not set. Get it from the parcel records (or tap parcels on the map), import it from onX, or draw it.'),
     h('div', { class: 'row' }, id ? h('button', { type: 'button', class: 'btn small', onclick: () => { closeSheet(); selectProperty(id); ui.mode = { kind: 'draw', type: 'areaother', pts: [], forBoundary: id }; drawPreview(); renderSync(); } }, p.boundary ? 'Redraw' : 'Draw boundary') : h('span', { class: 'muted' }, 'Save first, then draw.'),
+      id ? h('button', { type: 'button', class: 'btn small', onclick: () => { closeSheet(); boundaryFromParcels(p); } }, 'From parcel records') : null,
       p.boundary ? h('button', { type: 'button', class: 'btn small danger', onclick: async () => { p.boundary = null; await store.upsert('properties', p, `Clear boundary ${p.name}`); editProperty(id); } }, 'Clear') : null));
   const center = h('p', { class: 'muted', style: 'font-size:.85rem' }, `Center: ${p.center[0].toFixed(5)}, ${p.center[1].toFixed(5)}  `, h('button', { type: 'button', class: 'btn small', onclick: () => { const c = ui.map.getCenter(); p.center = [round7(c.lat), round7(c.lng)]; center.firstChild.textContent = `Center: ${p.center[0].toFixed(5)}, ${p.center[1].toFixed(5)}  `; } }, 'Use map center'));
   f.append(inp('Name', 'name'), inp('Short label on map', 'short'), inp('County', 'county'), inp('Area / nearest town', 'area'), inp('Acres', 'acres', 'number'), h('label', { class: 'field' }, h('span', {}, 'Ownership'), own), h('label', { class: 'field' }, h('span', {}, 'Notes'), notes), center, bcard,

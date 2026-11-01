@@ -2,17 +2,45 @@
 export const REPO = { owner: 'clevelandbuilders-cmyk', name: 'hunt-plan', branch: 'main' };
 export const VAULT_PATH = 'data/vault.json';
 
-// Map layers. All free, no API key. maxNative = deepest zoom the source has; Leaflet upscales past it.
+// Map layers. All free, no API key.
+// kind: xyz (tile template) | export (ArcGIS MapServer/ImageServer drawn per tile) | stack (several layers together)
+// maxNative = deepest zoom the source has; Leaflet upscales past it.
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const USGS = 'https://basemap.nationalmap.gov/arcgis/rest/services/';
+const esri = (path, maxNative, extra = {}) => ({ kind: 'xyz', url: `${ESRI}${path}/MapServer/tile/{z}/{y}/{x}`, maxNative, attr: 'Esri', ...extra });
+const WI_LEAF_OFF = { kind: 'export', url: 'https://dnrmaps.wi.gov/arcgis_image/rest/services/DW_Imagery/EN_Image_Basemap_Latest_Leaf_Off/ImageServer', image: true, minZoom: 12, attr: 'WI DNR, WROC / SEWRPC leaf-off imagery' };
+const LABELS = esri('Reference/World_Boundaries_and_Places', 19, { opacity: 0.9 });
+const ROADS = esri('Reference/World_Transportation', 19, { opacity: 0.9 });
+
 export const BASE_LAYERS = [
-  { id: 'imagery-topo', label: 'Satellite + contours', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}', maxNative: 16, attr: 'USGS The National Map' },
-  { id: 'satellite', label: 'Satellite (sharpest)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxNative: 19, attr: 'Esri, Maxar, Earthstar Geographics' },
-  { id: 'usgs-topo', label: 'USGS topo', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', maxNative: 16, attr: 'USGS The National Map' },
-  { id: 'esri-topo', label: 'Topo (detailed)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', maxNative: 19, attr: 'Esri, USGS, NOAA' },
+  { id: 'wi-leafoff', label: 'WI leaf-off 3-inch (county flights)', note: 'Sharpest. Spring leaf-off photos from county flights (2020-2024). Shows trails, benches, cover. Wisconsin only; Esri imagery fills in when zoomed out.', kind: 'stack', layers: [esri('World_Imagery', 19), WI_LEAF_OFF] },
+  { id: 'wi-leafoff-hybrid', label: 'WI leaf-off + roads & labels', kind: 'stack', layers: [esri('World_Imagery', 19), WI_LEAF_OFF, ROADS, LABELS] },
+  { id: 'satellite', label: 'Imagery (Esri)', note: 'Leaf-on, worldwide.', kind: 'stack', layers: [esri('World_Imagery', 19)] },
+  { id: 'imagery-hybrid', label: 'Imagery hybrid (Esri)', kind: 'stack', layers: [esri('World_Imagery', 19), ROADS, LABELS] },
+  { id: 'naip', label: 'NAIP summer imagery (USDA)', note: 'Leaf-on summer photos. Good for crops and food sources.', kind: 'stack', layers: [esri('World_Imagery', 19), { kind: 'export', url: 'https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer', image: true, minZoom: 11, attr: 'USDA NAIP via USGS' }] },
+  { id: 'imagery-topo', label: 'Imagery + contours (USGS)', kind: 'xyz', url: `${USGS}USGSImageryTopo/MapServer/tile/{z}/{y}/{x}`, maxNative: 16, attr: 'USGS The National Map' },
+  { id: 'usgs-topo', label: 'USGS National Map', kind: 'xyz', url: `${USGS}USGSTopo/MapServer/tile/{z}/{y}/{x}`, maxNative: 16, attr: 'USGS The National Map' },
+  { id: 'usa-topo', label: 'USA Topo Maps (classic quads)', ...esri('USA_Topo_Maps', 15) },
+  { id: 'esri-topo', label: 'Topographic', ...esri('World_Topo_Map', 19) },
+  { id: 'natgeo', label: 'National Geographic style', ...esri('NatGeo_World_Map', 16) },
+  { id: 'terrain', label: 'Terrain with labels', kind: 'stack', layers: [esri('World_Terrain_Base', 13), esri('Reference/World_Reference_Overlay', 13)] },
+  { id: 'streets', label: 'Streets', ...esri('World_Street_Map', 19) },
+  { id: 'osm', label: 'OpenStreetMap', kind: 'xyz', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxNative: 19, attr: '© OpenStreetMap contributors' },
+  { id: 'light-gray', label: 'Light gray canvas', kind: 'stack', layers: [esri('Canvas/World_Light_Gray_Base', 16), esri('Canvas/World_Light_Gray_Reference', 16)] },
+  { id: 'dark-gray', label: 'Dark gray canvas', kind: 'stack', layers: [esri('Canvas/World_Dark_Gray_Base', 16), esri('Canvas/World_Dark_Gray_Reference', 16)] },
+  { id: 'oceans', label: 'Oceans', kind: 'stack', layers: [esri('Ocean/World_Ocean_Base', 13), esri('Ocean/World_Ocean_Reference', 13)] },
 ];
+export const DEFAULT_BASE = 'wi-leafoff';
+
 export const OVERLAYS = [
-  { id: 'hillshade', label: 'Hillshade (ridges & draws)', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}', maxNative: 16, opacity: 0.45, attr: 'USGS' },
-  { id: 'labels', label: 'Roads & place names', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', maxNative: 19, opacity: 0.9, attr: 'Esri' },
+  { id: 'parcels', label: 'Property lines & owners (WI parcels)', kind: 'parcels', default: true },
+  { id: 'hillshade', label: 'Hillshade (ridges & draws)', kind: 'xyz', url: `${USGS}USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}`, maxNative: 16, opacity: 0.45, attr: 'USGS' },
+  { id: 'contours', label: 'Contour lines (USGS)', kind: 'export', url: 'https://carto.nationalmap.gov/arcgis/rest/services/contours/MapServer', minZoom: 13, attr: 'USGS' },
+  { id: 'labels', label: 'Roads & place names', kind: 'stack', layers: [ROADS, LABELS] },
 ];
+
+// Wisconsin statewide parcel map (V12, 2026), hosted by the WI State Cartographer's Office.
+export const PARCELS_URL = 'https://services3.arcgis.com/n6uYoouQZW75n5WI/ArcGIS/rest/services/Wisconsin_Statewide_Parcels_DB/FeatureServer/0';
 
 export const WINDS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
