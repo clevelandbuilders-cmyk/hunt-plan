@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#12160f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hunt Plan">
+<title>Hunt Plan</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="lock">
+  <form id="lockForm" autocomplete="on">
+    <img class="logo" src="icons/icon.svg" alt="">
+    <h1>Hunt Plan</h1>
+    <p>Private. Enter the shared password.</p>
+    <input type="text" name="username" value="hunt-plan" autocomplete="username" class="hidden" aria-hidden="true">
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+    <label class="check"><input id="remember" type="checkbox" checked> Keep me signed in on this device</label>
+    <button class="btn primary" id="unlockBtn">Unlock</button>
+    <div class="err" id="lockErr"></div>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <div id="map"></div>
+  <svg id="crosshair" class="hidden" viewBox="0 0 44 44"><circle cx="22" cy="22" r="9" fill="none" stroke="#fff" stroke-width="3"/><circle cx="22" cy="22" r="9" fill="none" stroke="#f08c00" stroke-width="1.5"/><path d="M22 0v13M22 31v13M0 22h13M31 22h13" stroke="#fff" stroke-width="3"/><path d="M22 0v13M22 31v13M0 22h13M31 22h13" stroke="#f08c00" stroke-width="1.5"/></svg>
+  <aside id="sheet" aria-live="polite"><div class="grab"></div><header><h2 id="sheetTitle"></h2><button class="round" id="sheetClose" aria-label="Close">✕</button></header><div id="sheetBody"></div></aside>
+  <div id="topbar">
+    <button class="chip" id="propBtn"><span class="name" id="propName">Properties</span><span>▾</span></button>
+    <button class="chip" id="syncBtn" aria-label="Sync status"><span id="syncDot"></span></button>
+    <button class="chip" id="menuBtn" aria-label="Menu">☰</button>
+  </div>
+  <div id="tools">
+    <button class="round" id="layersBtn" title="Map layers" aria-label="Map layers">🗺️</button>
+    <button class="round" id="locateBtn" title="My location" aria-label="My location">◎</button>
+    <button class="round" id="listBtn" title="List" aria-label="List of marks">☷</button>
+    <button class="round" id="fitBtn" title="Zoom to property" aria-label="Zoom to property">⤢</button>
+  </div>
+  <button id="fab" class="hidden" aria-label="Add">+</button>
+  <div id="banner" class="banner hidden"></div>
+</div>
+<div id="toast" class="hidden"></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/togeojson.umd.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
