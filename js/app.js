@@ -125,6 +125,11 @@ function fitAll() {
   const near = ps.filter((p) => distM(p.center, ps[0].center) < 30000);
   ui.map.fitBounds(L.latLngBounds(near.map((p) => p.center)).pad(0.6), { maxZoom: 15 });
 }
+$('#v3dBtn').onclick = async () => {
+  const c = ui.map.getCenter();
+  const { open3d } = await import('./view3d.js');
+  open3d({ features: featuresOf(ui.propId), properties: data().properties, propId: ui.propId, center: [c.lat, c.lng], zoom: ui.map.getZoom() });
+};
 $('#fitBtn').onclick = () => (ui.propId ? fitProperty() : fitAll());
 
 function selectProperty(id, move = true) {
@@ -138,7 +143,7 @@ function selectProperty(id, move = true) {
 
 function markerIcon(f) {
   const t = TYPES[f.type] || TYPES.waypoint;
-  return L.divIcon({ className: '', html: `<div class="mk${ui.selected === f.id ? ' sel' : ''}" style="background:${t.color}">${iconSvg(f.type, 17)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+  return L.divIcon({ className: '', html: `<div class="mk${ui.selected === f.id ? ' sel' : ''}" style="background:${f.props?.color || t.color}">${iconSvg(f.type, 17)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
 }
 function render() {
   if (!ui.map) return;
@@ -164,7 +169,8 @@ function render() {
       layer = L.marker([f.geometry.coordinates[1], f.geometry.coordinates[0]], { icon: markerIcon(f), opacity: dim ? 0.55 : 1, draggable: ui.mode?.kind === 'move' && ui.mode.id === f.id });
       if (ui.mode?.kind === 'move' && ui.mode.id === f.id) { ui.mode.marker = layer; }
     } else {
-      layer = L.geoJSON(f.geometry, { style: { color: t.color, weight: t.geom === 'line' ? 4 : 2, fillColor: t.color, fillOpacity: t.geom === 'area' ? 0.22 : 0, opacity: dim ? 0.5 : 0.95, dashArray: f.type === 'route' ? '6 6' : f.type === 'sanctuary' ? '2 6' : null } });
+      const col = f.props?.color || t.color;
+      layer = L.geoJSON(f.geometry, { style: { color: col, weight: t.geom === 'line' ? 4 : 2, fillColor: col, fillOpacity: t.geom === 'area' ? 0.22 : 0, opacity: dim ? 0.5 : 0.95, dashArray: f.type === 'route' ? '6 6' : f.type === 'sanctuary' ? '2 6' : null } });
     }
     if (ui.labels && f.name && z >= 16 && !dim) layer.bindTooltip(f.name, { permanent: true, direction: f.geometry.type === 'Point' ? 'right' : 'center', offset: f.geometry.type === 'Point' ? [14, 0] : [0, 0], className: 'lbl' });
     layer.on('click', (e) => { if (ui.mode) return; L.DomEvent.stopPropagation(e); showFeature(f.id); });
