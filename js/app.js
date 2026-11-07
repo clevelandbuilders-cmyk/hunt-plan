@@ -1,6 +1,6 @@
 // Hunt Plan: main UI. Map + per-property sections + marks editing + onX import.
 import { COUNTY_VIEWERS, BASE_LAYERS, OVERLAYS, DEFAULT_BASE, TYPES, FIELD_DEFS, WINDS, REPO } from './config.js';
-import { makeLayer, parcelsLayer, parcelAt } from './layers.js';
+import { makeLayer, parcelsLayer, parcelAt, waybackReleases } from './layers.js';
 import { iconSvg } from './icons.js';
 import * as store from './store.js';
 import { uid } from './model.js';
@@ -90,8 +90,9 @@ function zset(layer, z) { if (layer.setZIndex) layer.setZIndex(z); if (layer.eac
 
 function initMap() {
   const view = store.prefs.view;
-  ui.map = L.map('map', { zoomControl: false, attributionControl: true, maxZoom: 21, tap: true }).setView([45.87, -91.66], 14);
+  ui.map = L.map('map', { zoomControl: false, attributionControl: true, maxZoom: 22, tap: true }).setView([45.87, -91.66], 14);
   L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(ui.map);
+  ui.wayback = view.waybackV2 || null;
   setBase(view.baseV2 || DEFAULT_BASE);
   for (const id of view.overlaysV2 || OVERLAYS.filter((o) => o.default).map((o) => o.id)) toggleOverlay(id, true);
   ui.labels = view.labelsV2 === true; // names on the map are off unless turned on in Map layers
@@ -104,8 +105,8 @@ function initMap() {
   if (pid && prop(pid)) selectProperty(pid, false); else { render(); openPropertyPicker(); fitAll(); }
   handleEditorLink();
 }
-function saveView() { store.prefs.view = { baseV2: ui.baseId, overlaysV2: Object.keys(ui.overlays), labelsV2: ui.labels, prop: ui.propId }; }
-function setBase(id) { if (ui.base) ui.map.removeLayer(ui.base); const l = BASE_LAYERS.find((x) => x.id === id) || BASE_LAYERS[0]; ui.base = zset(makeLayer(l), 1).addTo(ui.map); ui.baseId = l.id; saveView(); }
+function saveView() { store.prefs.view = { baseV2: ui.baseId, overlaysV2: Object.keys(ui.overlays), labelsV2: ui.labels, waybackV2: ui.wayback, prop: ui.propId }; }
+function setBase(id) { if (ui.base) ui.map.removeLayer(ui.base); const l = BASE_LAYERS.find((x) => x.id === id) || BASE_LAYERS[0]; ui.base = zset(makeLayer(l, { release: ui.wayback }), 1).addTo(ui.map); ui.baseId = l.id; saveView(); }
 function toggleOverlay(id, on) {
   if (ui.overlays[id]) { ui.map.removeLayer(ui.overlays[id]); delete ui.overlays[id]; }
   if (on) { const l = OVERLAYS.find((x) => x.id === id); if (l) ui.overlays[id] = (l.kind === 'parcels' ? parcelsLayer(ui.map, onParcelTap) : zset(makeLayer(l), 50 + OVERLAYS.indexOf(l) * 5)).addTo(ui.map); }
@@ -216,14 +217,28 @@ $('#layersBtn').onclick = () => {
   const body = h('div');
   body.append(h('div', { class: 'group' }, 'Base map'));
   const list = h('div', { class: 'list' });
-  for (const l of BASE_LAYERS) list.append(h('button', { class: 'item' + (ui.baseId === l.id ? ' sel' : ''), onclick: () => { setBase(l.id); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, l.label), h('small', {}, l.note || l.attr || (l.layers || []).map((x) => x.attr).filter(Boolean).slice(-1)[0] || ''))));
+  for (const l of BASE_LAYERS) {
+    list.append(h('button', { class: 'item' + (ui.baseId === l.id ? ' sel' : ''), onclick: () => { setBase(l.id); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, l.label), h('small', {}, l.note || l.attr || (l.layers || []).map((x) => x.attr).filter(Boolean).slice(-1)[0] || ''))));
+    if (l.kind === 'wayback' && ui.baseId === l.id) list.append(waybackPicker());
+  }
   body.append(list, h('div', { class: 'group' }, 'Overlays'));
   const ol = h('div', { class: 'list' });
   for (const l of OVERLAYS) ol.append(h('button', { class: 'item' + (ui.overlays[l.id] ? ' sel' : ''), onclick: () => { toggleOverlay(l.id, !ui.overlays[l.id]); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.overlays[l.id] ? '✓ ' : '') + l.label))));
   ol.append(h('button', { class: 'item' + (ui.labels ? ' sel' : ''), onclick: () => { ui.labels = !ui.labels; saveView(); render(); $('#layersBtn').click(); } }, h('span', { class: 't' }, h('b', {}, (ui.labels ? '✓ ' : '') + 'Show mark names on the map'))));
-  body.append(ol, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Tip: WI leaf-off shows the woods with no leaves, so trails, benches and thick cover stand out. Add Contour lines or Hillshade to read saddles, ridges and draws. Property lines show once you zoom in close; tap inside one for the owner.'));
+  body.append(ol, h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Tip: WI leaf-off is the sharpest photo here (3-inch pixels), with the woods bare so trails, benches and thick cover stand out. Esri imagery by date lets you flip through older satellite photos to find a leaf-off or snow one. Add Contour lines or Hillshade to read saddles, ridges and draws. Property lines show once you zoom in close; tap inside one for the owner.'));
   openSheet('Map layers', body);
 };
+
+// Date picker for Esri Wayback: each date is one past version of Esri's satellite imagery.
+function waybackPicker() {
+  const sel = h('select', { 'aria-label': 'Imagery date', style: 'width:100%;margin:4px 0 10px' }, h('option', {}, 'Loading dates…'));
+  waybackReleases().then((list) => {
+    sel.replaceChildren(...list.map((r, i) => h('option', { value: String(r.release) }, r.date + (i === 0 ? ' (newest)' : ''))));
+    sel.value = String(ui.wayback || list[0].release);
+  }).catch(() => sel.replaceChildren(h('option', {}, 'Dates could not load right now')));
+  sel.onchange = () => { ui.wayback = Number(sel.value); setBase('wayback'); };
+  return sel;
+}
 
 // ---------- list ----------
 $('#listBtn').onclick = () => openList();

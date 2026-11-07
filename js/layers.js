@@ -1,31 +1,49 @@
 // Builds Leaflet layers from the catalog in config.js, plus the live parcel-lines overlay.
-import { PARCELS_URL } from './config.js';
+import { PARCELS_URL, WAYBACK_CONFIG, waybackUrl } from './config.js';
 
 const R = 6378137, HALF = Math.PI * R;
+// Phones and iPads have 2-3 screen pixels per CSS pixel. Asking the server for 2x the pixels
+// makes the 3-inch county photos look sharp there instead of blown up.
+export const HD = (window.devicePixelRatio || 1) >= 1.5 ? 2 : 1;
 
 // Draws an ArcGIS MapServer (export) or ImageServer (exportImage) as 512px Web Mercator tiles,
 // so services published in Wisconsin's own projection still line up with everything else.
 const ExportTiles = L.TileLayer.extend({
   initialize(def) {
     this.def = def;
-    L.TileLayer.prototype.initialize.call(this, '', { tileSize: 512, zoomOffset: -1, minZoom: def.minZoom || 0, maxZoom: 21, maxNativeZoom: 21, opacity: def.opacity ?? 1, attribution: def.attr });
+    L.TileLayer.prototype.initialize.call(this, '', { tileSize: 512, zoomOffset: -1, minZoom: def.minZoom || 0, maxZoom: 22, maxNativeZoom: 22, opacity: def.opacity ?? 1, attribution: def.attr });
   },
   getTileUrl(c) {
     // A 512px tile at zoom z covers the same ground as a 256px tile at zoom z-1.
     const n = Math.pow(2, c.z + this.options.zoomOffset), size = (2 * HALF) / n;
     const minx = -HALF + c.x * size, maxx = minx + size, maxy = HALF - c.y * size, miny = maxy - size;
     const bbox = [minx, miny, maxx, maxy].map((v) => v.toFixed(2)).join(',');
-    const d = this.def;
+    const d = this.def, px = 512 * HD;
     return d.image
-      ? `${d.url}/exportImage?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=512,512&format=jpgpng&f=image`
-      : `${d.url}/export?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=512,512&dpi=96&format=png32&transparent=true&f=image${d.layers ? '&layers=' + d.layers : ''}`;
+      ? `${d.url}/exportImage?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=${px},${px}&format=jpgpng&f=image`
+      : `${d.url}/export?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=${px},${px}&dpi=${96 * HD}&format=png32&transparent=true&f=image${d.layers ? '&layers=' + d.layers : ''}`;
   },
 });
 
-export function makeLayer(def) {
+export function makeLayer(def, opts = {}) {
+  if (def.kind === 'wayback') return L.tileLayer(waybackUrl(opts.release || WAYBACK_LATEST), { maxNativeZoom: 19, maxZoom: 22, attribution: 'Esri World Imagery Wayback' });
   if (def.kind === 'stack') return L.layerGroup(def.layers.map(makeLayer));
   if (def.kind === 'export') return new ExportTiles(def);
-  return L.tileLayer(def.url, { maxNativeZoom: def.maxNative, maxZoom: 21, minZoom: def.minZoom || 0, opacity: def.opacity ?? 1, attribution: def.attr });
+  return L.tileLayer(def.url, { maxNativeZoom: def.maxNative, maxZoom: 22, minZoom: def.minZoom || 0, opacity: def.opacity ?? 1, attribution: def.attr });
+}
+
+// ---- Esri Wayback releases, newest first: [{ release, date }] ----
+const WAYBACK_LATEST = 43291; // 2026-10-29, used until the list loads
+let waybackList = null;
+export async function waybackReleases() {
+  if (waybackList) return waybackList;
+  const r = await fetch(WAYBACK_CONFIG);
+  const cfg = await r.json();
+  waybackList = Object.entries(cfg)
+    .map(([k, v]) => ({ release: Number(k), date: (String(v.itemTitle).match(/\d{4}-\d{2}-\d{2}/) || [''])[0] }))
+    .filter((x) => x.date)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  return waybackList;
 }
 
 // ---- parcels: fetched for the area on screen when zoomed in, drawn as lines, tap for owner ----
