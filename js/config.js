@@ -3,18 +3,24 @@ export const REPO = { owner: 'clevelandbuilders-cmyk', name: 'hunt-plan', branch
 export const VAULT_PATH = 'data/vault.json';
 
 // Map layers. All free, no API key.
-// kind: xyz (tile template) | export (ArcGIS MapServer/ImageServer drawn per tile) | stack (several layers together)
+// kind: xyz (tile template) | export (ArcGIS MapServer/ImageServer drawn per tile) | stack (several layers together) | wayback (Esri imagery from a chosen date)
 // maxNative = deepest zoom the source has; Leaflet upscales past it.
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 const USGS = 'https://basemap.nationalmap.gov/arcgis/rest/services/';
 const esri = (path, maxNative, extra = {}) => ({ kind: 'xyz', url: `${ESRI}${path}/MapServer/tile/{z}/{y}/{x}`, maxNative, attr: 'Esri', ...extra });
-const WI_LEAF_OFF = { kind: 'export', url: 'https://dnrmaps.wi.gov/arcgis_image/rest/services/DW_Imagery/EN_Image_Basemap_Latest_Leaf_Off/ImageServer', image: true, minZoom: 12, attr: 'WI DNR, WROC / SEWRPC leaf-off imagery' };
+const DNR = 'https://dnrmaps.wi.gov/arcgis_image/rest/services/DW_Imagery/';
+const dnr = (name, attr, minZoom = 12) => ({ kind: 'export', url: `${DNR}EN_Image_Basemap_${name}/ImageServer`, image: true, minZoom, attr });
+const WI_LEAF_OFF = dnr('Latest_Leaf_Off', 'WI DNR, WROC / SEWRPC leaf-off imagery');
 const LABELS = esri('Reference/World_Boundaries_and_Places', 19, { opacity: 0.9 });
 const ROADS = esri('Reference/World_Transportation', 19, { opacity: 0.9 });
 
 export const BASE_LAYERS = [
   { id: 'wi-leafoff', label: 'WI leaf-off 3-inch (county flights)', note: 'Sharpest. Spring leaf-off photos from county flights (2020-2024). Shows trails, benches, cover. Wisconsin only; Esri imagery fills in when zoomed out.', kind: 'stack', layers: [esri('World_Imagery', 19), WI_LEAF_OFF] },
   { id: 'wi-leafoff-hybrid', label: 'WI leaf-off + roads & labels', kind: 'stack', layers: [esri('World_Imagery', 19), WI_LEAF_OFF, ROADS, LABELS] },
+  { id: 'wi-leafoff-2010', label: 'WI leaf-off 2010 (older flight)', note: 'Compare with the latest flight to see which trails, cuts and cover have changed.', kind: 'stack', layers: [esri('World_Imagery', 19), dnr('2010_Leaf_Off', 'WI DNR 2010 leaf-off imagery')] },
+  { id: 'wi-leafon', label: 'WI leaf-on latest (DNR)', note: 'Summer photos from the state. Shows crops, food plots and canopy.', kind: 'stack', layers: [esri('World_Imagery', 19), dnr('Latest_Leaf_On', 'WI DNR leaf-on imagery', 11)] },
+  { id: 'wi-leafon-2020', label: 'WI leaf-on 2020 (DNR)', kind: 'stack', layers: [esri('World_Imagery', 19), dnr('2020_Leaf_On', 'WI DNR 2020 leaf-on imagery', 11)] },
+  { id: 'wayback', label: 'Esri imagery by date (Wayback)', note: 'Every past version of Esri satellite imagery. Pick a date below; older dates sometimes show a sharper or leaf-off/snow photo.', kind: 'wayback' },
   { id: 'satellite', label: 'Imagery (Esri)', note: 'Leaf-on, worldwide.', kind: 'stack', layers: [esri('World_Imagery', 19)] },
   { id: 'imagery-hybrid', label: 'Imagery hybrid (Esri)', kind: 'stack', layers: [esri('World_Imagery', 19), ROADS, LABELS] },
   { id: 'naip', label: 'NAIP summer imagery (USDA)', note: 'Leaf-on summer photos. Good for crops and food sources.', kind: 'stack', layers: [esri('World_Imagery', 19), { kind: 'export', url: 'https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer', image: true, minZoom: 11, attr: 'USDA NAIP via USGS' }] },
@@ -31,6 +37,10 @@ export const BASE_LAYERS = [
   { id: 'oceans', label: 'Oceans', kind: 'stack', layers: [esri('Ocean/World_Ocean_Base', 13), esri('Ocean/World_Ocean_Reference', 13)] },
 ];
 export const DEFAULT_BASE = 'wi-leafoff';
+
+// Esri World Imagery Wayback: the list of past releases, and the tile address for one of them.
+export const WAYBACK_CONFIG = 'https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
+export const waybackUrl = (release) => `https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/${release}/{z}/{y}/{x}`;
 
 export const OVERLAYS = [
   { id: 'parcels', label: 'Property lines & owners (WI parcels)', kind: 'parcels', default: true },
